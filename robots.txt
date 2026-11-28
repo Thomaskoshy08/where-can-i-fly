@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://thomaskoshy08.github.io/where-can-i-fly/sitemap.xml
