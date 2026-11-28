@@ -1,0 +1,75 @@
+# Once a day, fetch the weather for every place in the app from Apple
+# WeatherKit and publish the website with it, so the app downloads one file
+# instead of calling WeatherKit for each user. About 2,700 calls a day.
+#
+# Needs repository secrets WEATHERKIT_KEY, WEATHERKIT_KEY_ID,
+# WEATHERKIT_TEAM_ID and WEATHERKIT_SERVICE_ID (Settings > Secrets and
+# variables > Actions), and Settings > Pages > Source set to "GitHub Actions".
+# Because this job publishes the site, it also runs when the site changes.
+name: Daily weather and website
+
+on:
+  schedule:
+    # 22:00 UTC, early morning in Asia.
+    - cron: '0 22 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: pip install 'pyjwt[crypto]==2.10.1' 'timezonefinder==6.5.9'
+
+      - name: Fetch weather
+        env:
+          WEATHERKIT_KEY: ${{ secrets.WEATHERKIT_KEY }}
+          WEATHERKIT_KEY_ID: ${{ secrets.WEATHERKIT_KEY_ID }}
+          WEATHERKIT_TEAM_ID: ${{ secrets.WEATHERKIT_TEAM_ID }}
+          WEATHERKIT_SERVICE_ID: ${{ secrets.WEATHERKIT_SERVICE_ID }}
+        run: python3 tools/weather.py
+
+      - name: Save the monthly climate file
+        run: |
+          if [ -n "$(git status --porcelain data/climate.json)" ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add data/climate.json
+            git commit -m 'Update climate data'
+            git push
+          fi
+
+      - name: Build the site
+        run: |
+          # Everything in the repository except its tooling, so new pages
+          # (guides, sitemap...) are published without editing this list.
+          rsync -a --exclude .git --exclude .github --exclude tools --exclude src --exclude _site --exclude data ./ _site/
+          cp data/climate.json _site/data/
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
