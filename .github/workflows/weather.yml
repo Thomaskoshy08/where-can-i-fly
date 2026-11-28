@@ -61,7 +61,9 @@ jobs:
 
       - name: Build the site
         run: |
-          cp -r index.html privacy.html terms.html style.css img _site/
+          # Everything in the repository except its tooling, so new pages
+          # (guides, sitemap...) are published without editing this list.
+          rsync -a --exclude .git --exclude .github --exclude tools --exclude src --exclude _site --exclude data ./ _site/
           cp data/climate.json _site/data/
           touch _site/.nojekyll
 
